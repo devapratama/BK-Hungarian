@@ -1,18 +1,20 @@
 import itertools
 import pandas as pd
 import numpy as np
+from sklearn.preprocessing import StandardScaler
 from imblearn.over_sampling import SMOTE
 from sklearn.metrics import accuracy_score
 import streamlit as st
 import time
 import pickle
 
+# Load and preprocess the data
 with open("hungarian.data", encoding='Latin1') as file:
-  lines = [line.strip() for line in file]
+    lines = [line.strip() for line in file]
 
 data = itertools.takewhile(
-  lambda x: len(x) == 76,
-  (' '.join(lines[i:(i + 10)]).split() for i in range(0, len(lines), 10))
+    lambda x: len(x) == 76,
+    (' '.join(lines[i:(i + 10)]).split() for i in range(0, len(lines), 10))
 )
 
 df = pd.DataFrame.from_records(data)
@@ -25,74 +27,66 @@ df.replace(-9.0, np.NaN, inplace=True)
 df_selected = df.iloc[:, [1, 2, 7, 8, 10, 14, 17, 30, 36, 38, 39, 42, 49, 56]]
 
 column_mapping = {
-  2: 'age',
-  3: 'sex',
-  8: 'cp',
-  9: 'trestbps',
-  11: 'chol',
-  15: 'fbs',
-  18: 'restecg',
-  31: 'thalach',
-  37: 'exang',
-  39: 'oldpeak',
-  40: 'slope',
-  43: 'ca',
-  50: 'thal',
-  57: 'target'
+    2: 'age',
+    3: 'sex',
+    8: 'cp',
+    9: 'trestbps',
+    11: 'chol',
+    15: 'fbs',
+    18: 'restecg',
+    31: 'thalach',
+    37: 'exang',
+    39: 'oldpeak',
+    40: 'slope',
+    43: 'ca',
+    50: 'thal',
+    57: 'target'
 }
 
 df_selected.rename(columns=column_mapping, inplace=True)
 
-columns_to_drop = ['ca', 'slope','thal']
+numeric_columns = ['age', 'trestbps', 'chol', 'thalach', 'oldpeak', 'target']
+categorical_columns = [col for col in df_selected.columns if col not in numeric_columns]
+
+for column in df_selected.columns:
+    if column in numeric_columns:
+        df_selected[column].fillna(df_selected[column].median(), inplace=True)
+    else:
+        df_selected[column].fillna(df_selected[column].mode()[0], inplace=True)
+
+columns_to_drop = ['ca', 'slope', 'thal']
 df_selected = df_selected.drop(columns_to_drop, axis=1)
-
-meanTBPS = df_selected['trestbps'].dropna()
-meanChol = df_selected['chol'].dropna()
-meanfbs = df_selected['fbs'].dropna()
-meanRestCG = df_selected['restecg'].dropna()
-meanthalach = df_selected['thalach'].dropna()
-meanexang = df_selected['exang'].dropna()
-
-meanTBPS = meanTBPS.astype(float)
-meanChol = meanChol.astype(float)
-meanfbs = meanfbs.astype(float)
-meanthalach = meanthalach.astype(float)
-meanexang = meanexang.astype(float)
-meanRestCG = meanRestCG.astype(float)
-
-meanTBPS = round(meanTBPS.mean())
-meanChol = round(meanChol.mean())
-meanfbs = round(meanfbs.mean())
-meanthalach = round(meanthalach.mean())
-meanexang = round(meanexang.mean())
-meanRestCG = round(meanRestCG.mean())
-
-fill_values = {
-  'trestbps': meanTBPS,
-  'chol': meanChol,
-  'fbs': meanfbs,
-  'thalach':meanthalach,
-  'exang':meanexang,
-  'restecg':meanRestCG
-}
-
-df_clean = df_selected.fillna(value=fill_values)
+df_clean = df_selected.copy()
 df_clean.drop_duplicates(inplace=True)
 
 X = df_clean.drop("target", axis=1)
 y = df_clean['target']
 
-smote = SMOTE(random_state=42)
-X, y = smote.fit_resample(X, y)
+# Scaling features
+scaler = StandardScaler()
+X_scaled = scaler.fit_transform(X)
 
+# Applying SMOTE
+smote = SMOTE(random_state=42)
+X_resampled, y_resampled = smote.fit_resample(X_scaled, y)
+
+# Load the model
 model = pickle.load(open("grid_rf.pkl", 'rb'))
 
-y_pred = model.predict(X)
-accuracy = accuracy_score(y, y_pred)
+# Predict and calculate accuracy
+y_pred = model.predict(X_resampled)
+accuracy = accuracy_score(y_resampled, y_pred)
 accuracy = round((accuracy * 100), 2)
 
-df_final = X
-df_final['target'] = y
+# Reverse scaling to get the original distribution of data
+X_original = scaler.inverse_transform(X_resampled)
+
+# Convert the numpy array back to a DataFrame, ensuring the column names match the original dataset
+feature_columns = X.columns  # Assuming X was a DataFrame before scaling
+df_final = pd.DataFrame(X_original, columns=feature_columns)
+
+# Add the 'target' column to the DataFrame
+df_final['target'] = y_resampled
 
 # ========================================================================================================================================================================================
 
