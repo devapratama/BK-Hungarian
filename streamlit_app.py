@@ -212,8 +212,16 @@ with tab1:
 
   st.write("")
   if predict_btn:
-    inputs = [[age, sex, cp, trestbps, chol, fbs, restecg, thalach, exang, oldpeak]]
-    prediction = model.predict(inputs)[0]
+    # Collect inputs into a dataframe
+    input_df = pd.DataFrame([[
+        age, sex, cp, trestbps, chol, fbs, restecg, thalach, exang, oldpeak
+    ]], columns=['age', 'sex', 'cp', 'trestbps', 'chol', 'fbs', 'restecg', 'thalach', 'exang', 'oldpeak'])
+    
+    # Standardize the inputs
+    input_df_scaled = scaler.transform(input_df)
+    
+    # Make prediction
+    prediction = model.predict(input_df_scaled)[0]
 
     bar = st.progress(0)
     status_text = st.empty()
@@ -257,7 +265,11 @@ with tab2:
 
   if file_uploaded:
     uploaded_df = pd.read_csv(file_uploaded)
-    prediction_arr = model.predict(uploaded_df)
+    # Standardize the uploaded data using the same scaler used for the training data
+    uploaded_df_scaled = scaler.transform(uploaded_df)
+
+    # Make predictions on the standardized data
+    prediction_arr = model.predict(uploaded_df_scaled)
 
     bar = st.progress(0)
     status_text = st.empty()
